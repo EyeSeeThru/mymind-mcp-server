@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mymind-mcp-server"
+version = "1.0.0"
+description = "MCP server for MyMind API"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+mymind-mcp = "mymind_server.server:main"
+
+[tool.setuptools]
+packages = ["mymind_server"]

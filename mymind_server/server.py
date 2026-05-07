@@ -13,6 +13,7 @@ import hashlib
 import hmac
 import time
 import argparse
+import urllib.parse
 import urllib.request
 import urllib.error
 from typing import Any, Optional
@@ -159,7 +160,8 @@ class MyMindClient:
         """Make an authenticated request to the MyMind API."""
         url = self.base_url + path
         if params:
-            qs = "&".join(f"{k}={v}" for k, v in params.items())
+            encoded_params = {k: urllib.parse.quote(str(v), safe="") for k, v in params.items()}
+            qs = "&".join(f"{k}={v}" for k, v in encoded_params.items())
             url = f"{url}?{qs}"
 
         data = json.dumps(body).encode() if body else None

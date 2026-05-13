@@ -396,6 +396,19 @@ class MyMindClient:
         """Remove tags. Body: [{ name: string }] or [{ id: Uid }] — mix allowed."""
         return self._request("DELETE", f"/objects/{object_id}/tags", body=tags)
 
+    # ─── Space Membership ─────────────────────────────────────────────────────
+
+    def add_object_to_space(self, space_id: str, object_id: str) -> dict:
+        return self._request("PUT", f"/spaces/{space_id}/objects/{object_id}")
+
+    def remove_object_from_space(self, space_id: str, object_id: str) -> dict:
+        return self._request("DELETE", f"/spaces/{space_id}/objects/{object_id}")
+
+    def add_object_to_space_by_object(self, object_id: str, space_ids: list[str]) -> dict:
+        """Add an object to one or more spaces. Reverse of add_object_to_space."""
+        body = [{"id": sid} for sid in space_ids]
+        return self._request("POST", f"/objects/{object_id}/spaces", body=body)
+
     # ─── Spaces ─────────────────────────────────────────────────────────────
 
     def list_spaces(self) -> list[dict]:
@@ -420,12 +433,6 @@ class MyMindClient:
 
     def delete_space(self, space_id: str) -> dict:
         return self._request("DELETE", f"/spaces/{space_id}")
-
-    def add_object_to_space(self, space_id: str, object_id: str) -> dict:
-        return self._request("PUT", f"/spaces/{space_id}/objects/{object_id}")
-
-    def remove_object_from_space(self, space_id: str, object_id: str) -> dict:
-        return self._request("DELETE", f"/spaces/{space_id}/objects/{object_id}")
 
     # ─── Links ──────────────────────────────────────────────────────────────
 
@@ -667,6 +674,12 @@ def handle_request(client: MyMindClient, method: str, params: dict) -> dict:
             return tool_to_response(
                 "remove_object_from_space",
                 client.remove_object_from_space(params["spaceId"], params["objectId"]),
+            )
+
+        elif method == "add_object_to_space_by_object":
+            return tool_to_response(
+                "add_object_to_space_by_object",
+                client.add_object_to_space_by_object(params["objectId"], params["spaceIds"]),
             )
 
         elif method == "list_links":
@@ -1007,6 +1020,18 @@ TOOLS = [
                 "objectId": {"type": "string"},
             },
             "required": ["spaceId", "objectId"],
+        },
+    },
+    {
+        "name": "add_object_to_space_by_object",
+        "description": "Add an object to one or more spaces. Alternative to add_object_to_space — uses POST /objects/:id/spaces. Params: objectId, spaceIds (array of space ID strings).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "objectId": {"type": "string"},
+                "spaceIds": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["objectId", "spaceIds"],
         },
     },
     # Links

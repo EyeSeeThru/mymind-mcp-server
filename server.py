@@ -18,7 +18,7 @@ import urllib.request
 import urllib.error
 from typing import Any, Optional
 
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 BASE_URL = "https://api.mymind.com"
 DEFAULT_KEY_PATH = os.path.expanduser("~/.mymind_mcp_access_key")
 DEFAULT_CONFIG_PATH = os.path.expanduser("~/.mymind_mcp_config.yaml")
@@ -204,12 +204,21 @@ class MyMindClient:
         limit: int = 100,
         content_as: Optional[str] = None,
         similar_to: Optional[str] = None,
+        created: Optional[str] = None,
+        bumped: Optional[str] = None,
+        published: Optional[str] = None,
     ) -> list[dict]:
         params: dict = {"limit": limit}
         if q:
             params["q"] = q
         if similar_to:
             params["similarTo"] = similar_to
+        if created:
+            params["created"] = created
+        if bumped:
+            params["bumped"] = bumped
+        if published:
+            params["published"] = published
         headers = {}
         if content_as:
             params["contentAs"] = content_as
@@ -372,6 +381,9 @@ class MyMindClient:
         semantic_boost: Optional[float] = None,
         similar_to: Optional[str] = None,
         rerank: bool = False,
+        created: Optional[str] = None,
+        bumped: Optional[str] = None,
+        published: Optional[str] = None,
     ) -> list[dict]:
         params: dict = {"q": query, "limit": limit}
         if semantic:
@@ -384,6 +396,12 @@ class MyMindClient:
         if rerank:
             params["rerank"] = "true"
             params["semantic"] = "true"
+        if created:
+            params["created"] = created
+        if bumped:
+            params["bumped"] = bumped
+        if published:
+            params["published"] = published
         return self._request("GET", "/search", params=params)
 
     # ─── Tags ───────────────────────────────────────────────────────────────
@@ -499,6 +517,9 @@ def handle_request(client: MyMindClient, method: str, params: dict) -> dict:
                     limit=params.get("limit", 100),
                     content_as=params.get("contentAs"),
                     similar_to=params.get("similarTo"),
+                    created=params.get("created"),
+                    bumped=params.get("bumped"),
+                    published=params.get("published"),
                 ),
             )
 
@@ -588,6 +609,9 @@ def handle_request(client: MyMindClient, method: str, params: dict) -> dict:
                     semantic_boost=params.get("semanticBoost"),
                     similar_to=params.get("similarTo"),
                     rerank=params.get("rerank", False),
+                    created=params.get("created"),
+                    bumped=params.get("bumped"),
+                    published=params.get("published"),
                 ),
             )
 
@@ -726,7 +750,7 @@ TOOLS = [
     # Objects
     {
         "name": "list_objects",
-        "description": "List objects from MyMind. Params: q (search), limit (default 100), contentAs (e.g. text/markdown), similarTo (rank by similarity to object ID).",
+        "description": "List objects from MyMind. Params: q, limit, contentAs, similarTo, created (IsoDateTimeRange), bumped (IsoDateTimeRange), published (IsoDateTimeRange).",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -734,6 +758,9 @@ TOOLS = [
                 "limit": {"type": "integer", "default": 100},
                 "contentAs": {"type": "string"},
                 "similarTo": {"type": "string"},
+                "created": {"type": "string"},
+                "bumped": {"type": "string"},
+                "published": {"type": "string"},
             },
         },
     },
@@ -900,7 +927,7 @@ TOOLS = [
     # Search
     {
         "name": "search",
-        "description": "Search MyMind objects. Params: query (required), limit, semantic, semanticBoost, similarTo, rerank.",
+        "description": "Search MyMind objects. Params: query (required), limit, semantic, semanticBoost, similarTo, rerank, created (IsoDateTimeRange), bumped (IsoDateTimeRange), published (IsoDateTimeRange).",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -910,6 +937,9 @@ TOOLS = [
                 "semanticBoost": {"type": "number"},
                 "similarTo": {"type": "string"},
                 "rerank": {"type": "boolean", "default": False},
+                "created": {"type": "string"},
+                "bumped": {"type": "string"},
+                "published": {"type": "string"},
             },
             "required": ["query"],
         },

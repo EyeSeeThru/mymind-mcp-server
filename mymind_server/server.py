@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-MyMind MCP Server v1.1
+MyMind MCP Server v1.4
 Wraps the MyMind REST API as a stdio MCP server.
 Works with any MCP-capable AI client.
 """
@@ -18,7 +18,7 @@ import urllib.request
 import urllib.error
 from typing import Any, Optional
 
-VERSION = "1.1.0"
+VERSION = "1.4.0"
 BASE_URL = "https://api.mymind.com"
 DEFAULT_KEY_PATH = os.path.expanduser("~/.mymind_mcp_access_key")
 DEFAULT_CONFIG_PATH = os.path.expanduser("~/.mymind_mcp_config.yaml")
@@ -203,10 +203,16 @@ class MyMindClient:
         q: Optional[str] = None,
         limit: int = 100,
         content_as: Optional[str] = None,
+        include: Optional[str] = None,
+        space_id: Optional[str] = None,
     ) -> list[dict]:
         params: dict = {"limit": limit}
         if q:
             params["q"] = q
+        if space_id:
+            params["spaceId"] = space_id
+        if include:
+            params["include"] = include
         headers = {}
         if content_as:
             params["contentAs"] = content_as
@@ -220,6 +226,7 @@ class MyMindClient:
         url: Optional[str] = None,
         tags: Optional[list[str]] = None,
         spaces: Optional[list[str]] = None,
+        notes: Optional[list[dict]] = None,
     ) -> dict:
         body: dict = {}
         if title:
@@ -232,16 +239,28 @@ class MyMindClient:
             body["tags"] = [{"name": t} for t in tags]
         if spaces:
             body["spaces"] = [{"id": s} for s in spaces]
+        if notes:
+            # Each note: {"content": {"type": "...", "body": "..."}}  or pass through
+            normalized = []
+            for n in notes:
+                if isinstance(n, dict) and "content" in n:
+                    normalized.append(n)
+                else:
+                    normalized.append({"content": {"type": "text/markdown", "body": str(n)}})
+            body["notes"] = normalized
         return self._request("POST", "/objects", body=body)
 
     def get_object(
         self,
         object_id: str,
         content_as: Optional[str] = None,
+        include: Optional[str] = None,
     ) -> dict:
         params = {}
         if content_as:
             params["contentAs"] = content_as
+        if include:
+            params["include"] = include
         return self._request(
             "GET",
             f"/objects/{object_id}",
@@ -253,12 +272,15 @@ class MyMindClient:
         object_id: str,
         title: Optional[str] = None,
         summary: Optional[str] = None,
+        completed: Optional[bool] = None,
     ) -> dict:
         body = {}
         if title is not None:
             body["title"] = title
         if summary is not None:
             body["summary"] = summary
+        if completed is not None:
+            body["completed"] = completed
         return self._request("PATCH", f"/objects/{object_id}", body=body)
 
     def delete_object(self, object_id: str) -> dict:
@@ -379,10 +401,17 @@ class MyMindClient:
     def list_spaces(self) -> list[dict]:
         return self._request("GET", "/spaces")
 
-    def create_space(self, name: str, color: Optional[str] = None) -> dict:
+    def create_space(
+        self,
+        name: str,
+        color: Optional[str] = None,
+        object_ids: Optional[list[str]] = None,
+    ) -> dict:
         body: dict = {"name": name}
         if color:
             body["color"] = color
+        if object_ids:
+            body["objects"] = [{"id": oid} for oid in object_ids]
         return self._request("POST", "/spaces", body=body)
 
     def get_space(self, space_id: str) -> dict:
@@ -469,6 +498,8 @@ def handle_request(client: MyMindClient, method: str, params: dict) -> dict:
                     q=params.get("q"),
                     limit=params.get("limit", 100),
                     content_as=params.get("contentAs"),
+                    include=params.get("include"),
+                    space_id=params.get("spaceId"),
                 ),
             )
 
@@ -481,13 +512,18 @@ def handle_request(client: MyMindClient, method: str, params: dict) -> dict:
                     url=params.get("url"),
                     tags=params.get("tags"),
                     spaces=params.get("spaces"),
+                    notes=params.get("notes"),
                 ),
             )
 
         elif method == "get_object":
             return tool_to_response(
                 "get_object",
-                client.get_object(params["id"], content_as=params.get("contentAs")),
+                client.get_object(
+                    params["id"],
+                    content_as=params.get("contentAs"),
+                    include=params.get("include"),
+                ),
             )
 
         elif method == "update_object":
@@ -497,6 +533,7 @@ def handle_request(client: MyMindClient, method: str, params: dict) -> dict:
                     params["id"],
                     title=params.get("title"),
                     summary=params.get("summary"),
+                    completed=params.get("completed"),
                 ),
             )
 
@@ -603,6 +640,7 @@ def handle_request(client: MyMindClient, method: str, params: dict) -> dict:
                 client.create_space(
                     params["name"],
                     color=params.get("color"),
+                    object_ids=params.get("objectIds"),
                 ),
             )
 
@@ -684,19 +722,21 @@ TOOLS = [
     # Objects
     {
         "name": "list_objects",
-        "description": "List objects from MyMind. Params: q (search), limit (default 100), contentAs (e.g. text/markdown).",
+        "description": "List objects from MyMind. Params: q (search), limit (default 100), contentAs (e.g. text/markdown), include (e.g. 'embeddings' — adds the embeddings array to each object), spaceId (restrict to one space).",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "q": {"type": "string"},
                 "limit": {"type": "integer", "default": 100},
                 "contentAs": {"type": "string"},
+                "include": {"type": "string"},
+                "spaceId": {"type": "string"},
             },
         },
     },
     {
         "name": "create_object",
-        "description": "Create a new object (URL, note, or content) in MyMind.",
+        "description": "Create a new object (URL, note, or content) in MyMind. Optional: tags, spaces, notes (list of {content: {type, body}} attached at creation — v0.7.0).",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -705,30 +745,33 @@ TOOLS = [
                 "url": {"type": "string"},
                 "tags": {"type": "array", "items": {"type": "string"}},
                 "spaces": {"type": "array", "items": {"type": "string"}},
+                "notes": {"type": "array", "items": {"type": "object"}},
             },
         },
     },
     {
         "name": "get_object",
-        "description": "Get a single object by ID. Optional: contentAs for format conversion.",
+        "description": "Get a single object by ID. Optional: contentAs for format conversion, include (e.g. 'embeddings' — v0.7.0).",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "id": {"type": "string"},
                 "contentAs": {"type": "string"},
+                "include": {"type": "string"},
             },
             "required": ["id"],
         },
     },
     {
         "name": "update_object",
-        "description": "Update an object's title or summary.",
+        "description": "Update an object's title, summary, or completed (boolean — mark done / un-mark — v0.7.0).",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "id": {"type": "string"},
                 "title": {"type": "string"},
                 "summary": {"type": "string"},
+                "completed": {"type": "boolean"},
             },
             "required": ["id"],
         },
@@ -902,12 +945,13 @@ TOOLS = [
     },
     {
         "name": "create_space",
-        "description": "Create a new space. Optional: color (CSS color value).",
+        "description": "Create a new space. Optional: color (CSS color value), objectIds (list of Uid — populate space at creation — v0.7.0).",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "name": {"type": "string"},
                 "color": {"type": "string"},
+                "objectIds": {"type": "array", "items": {"type": "string"}},
             },
             "required": ["name"],
         },
@@ -1012,7 +1056,7 @@ TOOLS = [
 
 
 def main():
-    parser = argparse.ArgumentParser(description="MyMind MCP Server v1.1")
+    parser = argparse.ArgumentParser(description="MyMind MCP Server v1.4")
     parser.add_argument("--config", help="Path to YAML config file")
     parser.add_argument("--key-file", help="Path to plain text access key file")
     args = parser.parse_args()
